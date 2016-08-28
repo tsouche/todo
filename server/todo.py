@@ -39,7 +39,7 @@ def todo_list():
     # initiates the players collections
     result = []
     for task in todoColl.find({'status': 1}):
-        result.append(["X", task['task']])
+        result.append([task['_id'], task['task']])
     output = template('make_table', rows=result)
     return output
     
@@ -48,7 +48,11 @@ def new_item():
     # connects to the DB
     todoDB = MongoClient().todoDB
     todoColl = todoDB.todo
-    # collect the new task from the web
+    # collect the new task from the web: we cover here for the case where the 
+    # remote client will not proactively send the 'task' information:
+    #   - either the remote client sends 'task' via a GET method
+    #   - or we issue a form asking for the client to fill it in and 'save' it:
+    #     the form will then send the 'task' data via a GET method.
     if request.GET.get('save','').strip():
         # this  corresponds to the case when the client proactively pushes data 
         # to the server via a GET method.
@@ -60,6 +64,31 @@ def new_item():
         return msg
     else:
         return template('new_task.tpl')
+
+@route('/edit/<task_id>', method='GET')
+def edit_item(task_id):
+    # connects to the DB
+    todoDB = MongoClient().todoDB
+    todoColl = todoDB.todo
+    # converts the task_id into a valid ObjectId, to be used with MongoDB
+    task_id = ObjectId(task_id)
+    # collect the id of the task to be edited, and the data to be edited
+    if request.GET.save:
+        task = request.GET.task.strip()
+        status = request.GET.task.strip()
+        if status == "open":
+            status = 1
+        else:
+            status = 0     
+        # Now, it connects to the DB and updates the task
+        todoColl.find_one_and_update({'_id': task_id},
+            {'$set': {'task': task, 'status': status}})
+        msg = "<p>The task " + str(task_id) + " was successfully updated.</p>"
+        return msg
+    else:
+        # the form will then send the 'task' data via a GET method.
+        tt = todoColl.find_one({'_id': task_id})
+        return template('edit_task.tpl', old = tt['task'], id = tt['_id'])
 
 load_data()
 # starts the server
